@@ -304,18 +304,12 @@ from ansible_collections.dark_land.icx.plugins.module_utils.network.icx.icx impo
 from ansible.module_utils.connection import Connection, ConnectionError, exec_command
 from ansible_collections.ansible.netcommon.plugins.module_utils.network.common.utils import conditional, remove_default_spec
 
-# result = {}
-# result['changed'] = False
-
 
 def search_obj_in_list(vlan_id, lst):
     obj = list()
     for o in lst:
         if str(o['vlan_id']) == vlan_id:
             return o
-
-
-# result = {}
 
 
 def parse_vlan_brief(module, vlan_id):
@@ -328,7 +322,6 @@ def parse_vlan_brief(module, vlan_id):
     tagged_lags = list()
     router_int = str()
 
-
     for line in lines:
         if 'tagged' in line.split():
             lags = line.split(" lag ")
@@ -337,12 +330,12 @@ def parse_vlan_brief(module, vlan_id):
             del lags[0]
             for port in ports:
                 if "to" in port:
-                    p = port.split(" to ")
+                    p = port.strip().split(" to ")
                     pr = int(p[1].split('/')[2]) - int(p[0].split('/')[2])
                     for i in range(0, pr + 1):
-                        tagged_ports.append(str(p[0].split('/')[0]) + '/' + str(p[0].split('/')[1]) + '/' + str(int(p[0].split('/')[2]) + i))
+                        tagged_ports.append(p[0][0:4] + str(int(p[0].split('/')[2]) + i))
                 else:
-                    tagged_ports.append(port)
+                    tagged_ports.append(port.strip())
             for lag in lags:
                 if "to" in lag:
                     l = lag.split(" to ")
@@ -358,12 +351,12 @@ def parse_vlan_brief(module, vlan_id):
             del lags[0]
             for port in ports:
                 if "to" in port:
-                    p = port.split(" to ")
+                    p = port.strip().split(" to ")
                     pr = int(p[1].split('/')[2]) - int(p[0].split('/')[2])
                     for i in range(0, pr + 1):
-                        untagged_ports.append(str(p[0].split('/')[0]) + '/' + str(p[0].split('/')[1]) + '/' + str(int(p[0].split('/')[2]) + i))
+                        untagged_ports.append(p[0][0:4] + str(int(p[0].split('/')[2]) + i))
                 else:
-                    untagged_ports.append(port)
+                    untagged_ports.append(port.strip())
             for lag in lags:
                 if "to" in lag:
                     l = lag.split(" to ")
@@ -381,7 +374,7 @@ def parse_vlan_brief(module, vlan_id):
 def extract_list_from_interface(interface):
     if 'ethernet' in interface:
         if 'to' in interface:
-            s = re.search(r"\d+\/\d+/(?P<low>\d+)\sto\s+\d+\/\d+/(?P<high>\d+)", interface)
+            s = re.search(r"\d+\/\d+\/(?P<low>\d+)\sto\s+\d+\/\d+\/(?P<high>\d+)", interface)
             low = int(s.group('low'))
             high = int(s.group('high'))
         else:
@@ -512,52 +505,11 @@ def map_obj_to_commands(updates, module):
                     if interfaces['name']:
                         for item in interfaces['name']:
                             commands.append('untagged {0}'.format(item))
-                    if interfaces['purge'] is True:
-                        want_interfaces = list()
-                        for interface in interfaces['name']:
-                            low, high = extract_list_from_interface(interface)
-
-                            while(high >= low):
-                                if 'ethernet' in interface:
-                                    if 'to' in interfaces:
-                                        temp = interface.split('to')[0]
-                                        interfaceSplit = temp.rsplit('/', 1)
-                                    else:
-                                        interfaceSplit = interface.rsplit('/', 1)
-                                    want_interfaces.append(interfaceSplit[0] + '/' + '{0}'.format(low))
-                                if 'lag' in interface:
-                                    want_interfaces.append('lag {0}'.format(low))
-                                low = low + 1
-                        have_interfaces = list(parse_interfaces_argument(module, vlan_id, "interfaces"))
-                        remove_interfaces = list(set(have_interfaces) - set(want_interfaces))
-                        for item in remove_interfaces:
-                            commands.append('no untagged {0}'.format(item))
 
                 if tagged:
                     if tagged['name']:
                         for item in tagged['name']:
                             commands.append('tagged {0}'.format(item))
-                    if tagged['purge'] is True:
-                        want_tagged = list()
-                        for tag in tagged['name']:
-                            low, high = extract_list_from_interface(tag)
-                            # result['low'] = low
-                            # result['high'] = high
-                            while(high >= low):
-                                if 'ethernet' in tag:
-                                    if 'to' in tag:
-                                        temp = tag.split('to')[0]
-                                        tagSplit = temp.rsplit('/', 1)
-                                    else:
-                                        tagSplit = tag.rsplit('/', 1)
-                                    want_tagged.append(tagSplit[0] + '/' + '{0}'.format(low))
-                                if 'lag' in tag:
-                                    want_tagged.append('lag {0}'.format(low))
-                                low = low + 1
-                        have_tagged = list(parse_interfaces_argument(module, vlan_id, "tagged"))
-                        remove_tagged = list(set(have_tagged) - set(want_tagged))
-                        for item in remove_tagged:
-                            commands.append('no tagged {0}'.format(item))
 
                 if router_int['name']:
                     commands.append('router-interface {0}'.format(router_int['name']))
@@ -567,6 +519,7 @@ def map_obj_to_commands(updates, module):
                         [commands.append(cmd) for cmd in w['stp']]
 
                 commands.append('exit')
+
                 if dhcp is True:
                     commands.append('ip dhcp snooping vlan {0}'.format(vlan_id))
                 elif dhcp is False:
@@ -576,13 +529,90 @@ def map_obj_to_commands(updates, module):
                     commands.append('ip arp inspection vlan {0}'.format(vlan_id))
                 elif arp is False:
                     commands.append('no ip arp inspection vlan {0}'.format(vlan_id))
-                # commands.append('vlan {0}'.format(vlan_id))
+
+            else:
+                commands.append('vlan {0}'.format(vlan_id))
+                if name:
+                    if name != obj_in_have['name']:
+                        commands.append('vlan {0} name {1}'.format(vlan_id, name))
+
+                if interfaces:
+                    if interfaces['name']:
+                        have_interfaces = list()
+                        for interface in interfaces['name']:
+                            low, high = extract_list_from_interface(interface)
+
+                            while(high >= low):
+                                if 'ethernet' in interface:
+                                    have_interfaces.append(
+                                        'ethernet ' + interface.split(" ")[1].split("/")[0] + '/' + interface.split(" ")[1].split("/")[1] + '/{0}'.format(low)
+                                    )
+                                if 'lag' in interface:
+                                    have_interfaces.append('lag {0}'.format(low))
+                                low = low + 1
+
+                    if interfaces['purge'] is True:
+                        remove_interfaces = list(set(obj_in_have['interfaces']) - set(have_interfaces))
+                        for item in remove_interfaces:
+                            commands.append('no untagged {0}'.format(item))
+
+                    if interfaces['name']:
+                        add_interfaces = list(set(have_interfaces) - set(obj_in_have['interfaces']))
+                        for item in add_interfaces:
+                            commands.append('untagged {0}'.format(item))
+
+                if tagged:
+                    if tagged['name']:
+                        have_tagged = list()
+                        for tag in tagged['name']:
+                            low, high = extract_list_from_interface(tag)
+                            while(high >= low):
+                                if 'ethernet' in tag:
+                                    have_tagged.append(
+                                        'ethernet ' + tag.split(" ")[1].split("/")[0] + '/' + tag.split(" ")[1].split("/")[1] + '/{0}'.format(low)
+                                    )
+                                if 'lag' in tag:
+                                    have_tagged.append('lag {0}'.format(low))
+                                low = low + 1
+                    if tagged['purge'] is True:
+                        remove_tagged = list(set(obj_in_have['tagged']) - set(have_tagged))
+                        for item in remove_tagged:
+                            commands.append('no tagged {0}'.format(item))
+
+                    if tagged['name']:
+                        add_tagged = list(set(have_tagged) - set(obj_in_have['tagged']))
+                        for item in add_tagged:
+                            commands.append('tagged {0}'.format(item))
+
+                if dhcp != obj_in_have['ip_dhcp_snooping']:
+                    if dhcp is True:
+                        commands.append('ip dhcp snooping vlan {0}'.format(vlan_id))
+                    elif dhcp is False:
+                        commands.append('no ip dhcp snooping vlan {0}'.format(vlan_id))
+
+                if arp != obj_in_have['ip_arp_inspection']:
+                    if arp is True:
+                        commands.append('ip arp inspection vlan {0}'.format(vlan_id))
+                    elif arp is False:
+                        commands.append('no ip arp inspection vlan {0}'.format(vlan_id))
+
+                if router_int:
+                 if router_int['name']:
+                   if router_int['name'] != obj_in_have['router_int']:
+                       if obj_in_have['router_int']:
+                           commands.append('no router-interface {0}'.format(obj_in_have['router_int']))
+                       commands.append('router-interface {0}'.format(router_int['name']))
+                 elif obj_in_have['router_int'] and router_int['purge']:
+                     commands.append('no router-interface {0}'.format(obj_in_have['router_int']))
+
+                if stp:
+                    if w.get('stp'):
+                        [commands.append(cmd) for cmd in w['stp']]
 
             if len(commands) == 1 and 'vlan ' + str(vlan_id) in commands:
                 commands = []
 
     if purge:
-        # commands = []
         vlans = parse_vlan_id(module)
         for h in vlans:
             obj_in_want = search_obj_in_list(h, want)
@@ -602,11 +632,11 @@ def parse_name_argument(module, item):
 
 def parse_interfaces_argument(module, item, port_type):
     untagged_ports, untagged_lags, tagged_ports, tagged_lags, router_int = parse_vlan_brief(module, item)
-    ports = []
+    ports = list()
     if port_type == "interfaces":
         if untagged_ports:
             for port in untagged_ports:
-                ports.append('ethernet ' + str(port))
+                ports.append('ethernet ' + port)
         if untagged_lags:
             for port in untagged_lags:
                 ports.append('lag ' + str(port))
@@ -614,7 +644,7 @@ def parse_interfaces_argument(module, item, port_type):
     elif port_type == "tagged":
         if tagged_ports:
             for port in tagged_ports:
-                ports.append('ethernet ' + str(port))
+                ports.append('ethernet ' + port)
         if tagged_lags:
             for port in tagged_lags:
                 ports.append('lag ' + str(port))
@@ -664,19 +694,15 @@ def check_fail(module, output):
 
 def check_declarative_intent_params(want, module, result):
     def parse_ports(interfaces, ports, lags):
-        ports = [i.strip() for i in ports]
         for interface in interfaces:
             low, high = extract_list_from_interface(interface)
             while(high >= low):
                 if 'ethernet' in interface:
                     if 'to' in interface:
-                        temp = interface.split('to')[0].split(' ')[1]
-                        interfaceSplit = temp.rsplit('/', 1)[0]
-                    else:
-                        interfaceSplit = interface.rsplit('/', 1)[0].split(' ')[1]
-                    port = interfaceSplit + '/' + '{0}'.format(low)
-                    if not (port in ports):
-                        module.fail_json(msg='One or more conditional statements have not been satisfied ' + interface + 'ports' + str(ports))
+                        if not (interface.split(" to ")[1].split("/")[0] + '/' + interface.split(" ")[1].split("/")[1] + '/{0}'.format(low) in ports):
+                            module.fail_json(msg='One or more conditional statements have not been satisfied ' + interface)
+                    elif not (interface.split(" ")[1].split("/")[0] + '/' + interface.split(" ")[1].split("/")[1] + '/{0}'.format(low) in ports):
+                        module.fail_json(msg='One or more conditional statements have not been satisfied ' + interface)
                 if 'lag' in interface:
                     if not (low in lags):
                         module.fail_json(msg='One or more conditional statements have not been satisfied ' + interface)
@@ -734,7 +760,7 @@ def main():
         delay=dict(default=10, type='int'),
         stp=dict(type='dict', options=stp_spec),
         state=dict(default='present', choices=['present', 'absent']),
-        check_running_config=dict(default=False, type='bool', fallback=(env_fallback, ['ANSIBLE_CHECK_ICX_RUNNING_CONFIG'])),
+        check_running_config=dict(default=True, type='bool', fallback=(env_fallback, ['ANSIBLE_CHECK_ICX_RUNNING_CONFIG'])),
         router_int=dict(type='dict', options=router_spec)
     )
     aggregate_spec = deepcopy(element_spec)
