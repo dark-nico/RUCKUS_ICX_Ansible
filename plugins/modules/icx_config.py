@@ -349,7 +349,7 @@ def main():
                            supports_check_mode=True)
 
     result = {'changed': False}
-
+    run_commands(module, 'skip')
     warnings = list()
     check_args(module, warnings)
     result['warnings'] = warnings
