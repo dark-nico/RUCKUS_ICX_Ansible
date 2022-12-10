@@ -326,6 +326,8 @@ def parse_vlan_brief(module, vlan_id):
     untagged_lags = list()
     tagged_ports = list()
     tagged_lags = list()
+    router_int = str()
+
 
     for line in lines:
         if 'tagged' in line.split():
@@ -370,8 +372,11 @@ def parse_vlan_brief(module, vlan_id):
                         untagged_lags.append((int(l[0]) + i))
                 else:
                     untagged_lags.append(int(lag))
+         if 'router-interface' in line.split():
+            router_int = 've '+line.split(' ve ')[1].strip() if 'router-interface' in line.split():
+            router_int = 've '+line.split(' ve ')[1].strip()
 
-    return untagged_ports, untagged_lags, tagged_ports, tagged_lags
+    return untagged_ports, untagged_lags, tagged_ports, tagged_lags, router_int
 
 
 def extract_list_from_interface(interface):
@@ -462,6 +467,7 @@ def map_params_to_obj(module):
             'ip_dhcp_snooping': module.params['ip_dhcp_snooping'],
             'ip_arp_inspection': module.params['ip_arp_inspection'],
             'state': module.params['state'],
+            'router_int': module.params['router_int']
         }
 
         stp = module.params.get('stp')
@@ -488,6 +494,7 @@ def map_obj_to_commands(updates, module):
         dhcp = w.get('ip_dhcp_snooping')
         arp = w.get('ip_arp_inspection')
         stp = w.get('stp')
+        router_int = w.get('router_int')
         obj_in_have = search_obj_in_list(str(vlan_id), have)
 
         if state == 'absent':
@@ -553,6 +560,9 @@ def map_obj_to_commands(updates, module):
                         for item in remove_tagged:
                             commands.append('no tagged {0}'.format(item))
 
+                if router_int['name']:
+                    commands.append('router-interface {0}'.format(router_int['name']))
+
                 if stp:
                     if w.get('stp'):
                         [commands.append(cmd) for cmd in w['stp']]
@@ -592,7 +602,7 @@ def parse_name_argument(module, item):
 
 
 def parse_interfaces_argument(module, item, port_type):
-    untagged_ports, untagged_lags, tagged_ports, tagged_lags = parse_vlan_brief(module, item)
+    untagged_ports, untagged_lags, tagged_ports, tagged_lags, router_int = parse_vlan_brief(module, item)
     ports = []
     if port_type == "interfaces":
         if untagged_ports:
@@ -609,6 +619,10 @@ def parse_interfaces_argument(module, item, port_type):
         if tagged_lags:
             for port in tagged_lags:
                 ports.append('lag ' + str(port))
+    elif port_type == "router":
+        if router_int:
+            #ports.append(str(router_int))
+            ports = (str(router_int))
     return ports
 
 
@@ -633,6 +647,7 @@ def map_config_to_obj(module):
             'tagged': parse_interfaces_argument(module, item, 'tagged'),
             'ip_dhcp_snooping': parse_config_argument(config, 'ip dhcp snooping vlan {0}'.format(item)),
             'ip_arp_inspection': parse_config_argument(config, 'ip arp inspection vlan {0}'.format(item)),
+            'router_int':  parse_interfaces_argument(module, item, 'router'),
         }
         instance.append(obj)
     return instance
@@ -679,7 +694,7 @@ def check_declarative_intent_params(want, module, result):
             sleep(module.params['delay'])
             is_delay = True
 
-        untagged_ports, untagged_lags, tagged_ports, tagged_lags = parse_vlan_brief(module, w['vlan_id'])
+        untagged_ports, untagged_lags, tagged_ports, tagged_lags, router_int = parse_vlan_brief(module, w['vlan_id'])
 
         if w['associated_interfaces']:
             parse_ports(w.get('associated_interfaces'), untagged_ports, untagged_lags)
@@ -717,6 +732,7 @@ def main():
         stp=dict(type='dict', options=stp_spec),
         state=dict(default='present', choices=['present', 'absent']),
         check_running_config=dict(default=False, type='bool', fallback=(env_fallback, ['ANSIBLE_CHECK_ICX_RUNNING_CONFIG']))
+        router_int=dict(type='dict', options=router_spec)
     )
     aggregate_spec = deepcopy(element_spec)
     aggregate_spec['vlan_id'] = dict(required=True)
