@@ -372,8 +372,7 @@ def parse_vlan_brief(module, vlan_id):
                         untagged_lags.append((int(l[0]) + i))
                 else:
                     untagged_lags.append(int(lag))
-         if 'router-interface' in line.split():
-            router_int = 've '+line.split(' ve ')[1].strip() if 'router-interface' in line.split():
+        if 'router-interface' in line.split():
             router_int = 've '+line.split(' ve ')[1].strip()
 
     return untagged_ports, untagged_lags, tagged_ports, tagged_lags, router_int
@@ -719,6 +718,10 @@ def main():
         name=dict(type='list'),
         purge=dict(type='bool')
     )
+    router_spec = dict(
+        name=dict(),
+        purge=dict(type='bool')
+    )
     element_spec = dict(
         vlan_id=dict(type='int'),
         name=dict(),
@@ -731,7 +734,7 @@ def main():
         delay=dict(default=10, type='int'),
         stp=dict(type='dict', options=stp_spec),
         state=dict(default='present', choices=['present', 'absent']),
-        check_running_config=dict(default=False, type='bool', fallback=(env_fallback, ['ANSIBLE_CHECK_ICX_RUNNING_CONFIG']))
+        check_running_config=dict(default=False, type='bool', fallback=(env_fallback, ['ANSIBLE_CHECK_ICX_RUNNING_CONFIG'])),
         router_int=dict(type='dict', options=router_spec)
     )
     aggregate_spec = deepcopy(element_spec)
