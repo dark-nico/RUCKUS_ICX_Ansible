@@ -15,7 +15,7 @@ description:
   - This module provides declarative management of Layer-3 interfaces
     on ICX network devices.
 notes:
-  - Tested against ICX 8.0.95
+  - Tested against ICX 10.1.
   - For information on using ICX platform, see L(the ICX OS Platform Options guide,../network/user_guide/platform_icx.html).
 options:
   name:
@@ -99,7 +99,7 @@ options:
       check_running_config:
         description:
           - Check running configuration. This can be set as environment variable.
-           Module will use environment variable value(default:False), unless it is overridden, by specifying it as module parameter.
+           Module will use environment variable value(default:True), unless it is overridden, by specifying it as module parameter.
         type: bool
   state:
     description:
@@ -111,9 +111,9 @@ options:
   check_running_config:
     description:
       - Check running configuration. This can be set as environment variable.
-       Module will use environment variable value(default:False), unless it is overridden, by specifying it as module parameter.
+       Module will use environment variable value(default:True), unless it is overridden, by specifying it as module parameter.
     type: bool
-    default: no
+    default: yes
 '''
 
 EXAMPLES = """
@@ -123,43 +123,52 @@ EXAMPLES = """
     ipv4: 192.168.0.1/24
     ipv6: "fd5d:12c9:2201:1::1/64"
     state: absent
+
 - name: Replace ethernet 1/1/1 primary IPv4 address
   community.network.icx_l3_interface:
     name: ethernet 1/1/1
     ipv4: 192.168.0.1/24
     replace: yes
     state: absent
+
 - name: Replace ethernet 1/1/1 dynamic IPv4 address
   community.network.icx_l3_interface:
     name: ethernet 1/1/1
     ipv4: 192.168.0.1/24
     mode: dynamic
     state: absent
+
 - name: Set ethernet 1/1/1 secondary IPv4 address
   community.network.icx_l3_interface:
     name: ethernet 1/1/1
     ipv4: 192.168.0.1/24
     secondary: yes
     state: absent
+
 - name: Set ethernet 1/1/1 IPv4 address
   community.network.icx_l3_interface:
     name: ethernet 1/1/1
     ipv4: 192.168.0.1/24
+
 - name: Set ethernet 1/1/1 IPv6 address
   community.network.icx_l3_interface:
     name: ethernet 1/1/1
     ipv6: "fd5d:12c9:2201:1::1/64"
+
 - name: Set IP addresses on aggregate
   community.network.icx_l3_interface:
     aggregate:
       - { name: GigabitEthernet0/3, ipv4: 192.168.2.10/24 }
       - { name: GigabitEthernet0/3, ipv4: 192.168.3.10/24, ipv6: "fd5d:12c9:2201:1::1/64" }
+
 - name: Remove IP addresses on aggregate
   community.network.icx_l3_interface:
     aggregate:
       - { name: GigabitEthernet0/3, ipv4: 192.168.2.10/24 }
       - { name: GigabitEthernet0/3, ipv4: 192.168.3.10/24, ipv6: "fd5d:12c9:2201:1::1/64" }
     state: absent
+
+
 - name: Set the ipv4 and ipv6 of a virtual ethernet(ve)
   community.network.icx_l3_interface:
     name: ve 100
@@ -184,7 +193,7 @@ from copy import deepcopy
 from ansible.module_utils._text import to_text
 from ansible.module_utils.basic import AnsibleModule, env_fallback
 from ansible.module_utils.connection import exec_command
-from ansible_collections.dark_land.icx.plugins.module_utils.network.icx.icx import get_config, load_config
+from ansible_collections.community.network.plugins.module_utils.network.icx.icx import get_config, load_config
 from ansible_collections.ansible.netcommon.plugins.module_utils.network.common.config import NetworkConfig
 from ansible_collections.ansible.netcommon.plugins.module_utils.network.common.utils import remove_default_spec
 from ansible_collections.ansible.netcommon.plugins.module_utils.network.common.utils import is_netmask, is_masklen, to_netmask, to_masklen
@@ -236,6 +245,7 @@ def map_params_to_obj(module):
             'name': module.params['name'],
             'ipv4': module.params['ipv4'],
             'ipv6': module.params['ipv6'],
+            'vrf': module.params['vrf'],
             'state': module.params['state'],
             'replace': module.params['replace'],
             'mode': module.params['mode'],
@@ -285,6 +295,7 @@ def map_config_to_obj(module):
 
     for item in set(match):
         ipv4 = parse_config_argument(configobj, item, 'ip address')
+        vrf = parse_config_argument(configobj, item, 'vrf forwarding')
         if ipv4:
             address = ipv4.strip().split(' ')
             if len(address) == 2 and is_netmask(address[1]):
@@ -292,6 +303,7 @@ def map_config_to_obj(module):
         obj = {
             'name': item,
             'ipv4': ipv4,
+            'vrf': vrf,
             'ipv6': parse_config_argument(configobj, item, 'ipv6 address'),
             'state': 'present'
         }
@@ -305,6 +317,7 @@ def map_obj_to_commands(updates, module):
     want, have = updates
     for w in want:
         name = w['name']
+        vrf = w['vrf']
         ipv4 = w['ipv4']
         ipv6 = w['ipv6']
         state = w['state']
@@ -346,6 +359,15 @@ def map_obj_to_commands(updates, module):
                     commands.append('no ipv6 address {ip}'.format(ip=ipv6))
 
         elif state == 'present':
+            if vrf:
+                if obj_in_have['vrf']:
+                    if obj_in_have['vrf'] != vrf:
+                        commands.append('no vrf forwarding {vrf}'.format(vrf=obj_in_have['vrf']))
+                        commands.append('vrf forwarding {vrf}'.format(vrf=vrf))
+                        if obj_in_have['ipv4']:
+                            obj_in_have['ipv4'] = None
+                else:
+                        commands.append('vrf forwarding {vrf}'.format(vrf=vrf))
             if ipv4:
                 if obj_in_have is None or obj_in_have.get('ipv4') is None or ipv4 != obj_in_have['ipv4']:
                     address = ipv4.split('/')
@@ -372,10 +394,11 @@ def main():
         name=dict(),
         ipv4=dict(),
         ipv6=dict(),
+        vrf=dict(),
         replace=dict(choices=['yes', 'no']),
         mode=dict(choices=['dynamic', 'ospf-ignore', 'ospf-passive']),
         secondary=dict(choices=['yes', 'no']),
-        check_running_config=dict(default=False, type='bool', fallback=(env_fallback, ['ANSIBLE_CHECK_ICX_RUNNING_CONFIG'])),
+        check_running_config=dict(default=True, type='bool', fallback=(env_fallback, ['ANSIBLE_CHECK_ICX_RUNNING_CONFIG'])),
         state=dict(default='present',
                    choices=['present', 'absent']),
     )
@@ -401,6 +424,7 @@ def main():
     warnings = list()
 
     result = {'changed': False}
+    exec_command(module, 'skip')
     want = map_params_to_obj(module)
     have = map_config_to_obj(module)
     commands = map_obj_to_commands((want, have), module)

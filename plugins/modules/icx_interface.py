@@ -633,7 +633,7 @@ def main():
         state=dict(default='present',
                    choices=['present', 'absent', 'up', 'down']),
         power=dict(type='dict', options=power_spec),
-        check_running_config=dict(default=False, type='bool', fallback=(env_fallback, ['ANSIBLE_CHECK_ICX_RUNNING_CONFIG']))
+        check_running_config=dict(default=True, type='bool', fallback=(env_fallback, ['ANSIBLE_CHECK_ICX_RUNNING_CONFIG']))
     )
     aggregate_spec = deepcopy(element_spec)
     aggregate_spec['name'] = dict(required=True)
@@ -657,6 +657,7 @@ def main():
     result['changed'] = False
     if warnings:
         result['warnings'] = warnings
+    exec_command(module, 'skip')
     want = map_params_to_obj(module)
     have = map_config_to_obj(module)
     commands = map_obj_to_commands((want, have))
