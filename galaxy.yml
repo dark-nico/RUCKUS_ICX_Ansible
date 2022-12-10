@@ -1,7 +1,7 @@
 # See https://docs.ansible.com/ansible/latest/dev_guide/collections_galaxy_meta.html
 namespace: dark-land
 name: icx
-version: 1.0
+version: 1.0.0
 readme: README.md
 authors:
   - dark-nico
