@@ -35,14 +35,14 @@ options:
 
 EXAMPLES = """
 - name: Collect all facts from the device
-  commscope.icx.icx_facts:
+  dark_land.icx.icx_facts:
     gather_subset: all
 - name: Collect only the config and default facts
-  commscope.icx.icx_facts:
+  dark_land.icx.icx_facts:
     gather_subset:
       - config
 - name: Do not collect hardware facts
-  commscope.icx.icx_facts:
+  dark_land.icx.icx_facts:
     gather_subset:
       - "!hardware"
 """
@@ -124,7 +124,7 @@ ansible_net_neighbors:
 
 
 import re
-from ansible_collections.commscope.icx.plugins.module_utils.network.icx.icx import run_commands
+from ansible_collections.dark_land.icx.plugins.module_utils.network.icx.icx import run_commands
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.six import iteritems
 from ansible.module_utils.six.moves import zip

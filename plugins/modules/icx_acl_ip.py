@@ -309,7 +309,7 @@ EXAMPLES = """
 
 from ansible.module_utils.basic import AnsibleModule, env_fallback
 from ansible.module_utils.connection import ConnectionError, exec_command
-from ansible_collections.commscope.icx.plugins.module_utils.network.icx.icx import load_config
+from ansible_collections.dark_land.icx.plugins.module_utils.network.icx.icx import load_config
 
 
 def build_command(module, acl_type=None, acl_name=None, acl_id=None, accounting=None, standard_rules=None, extended_rules=None, state=None):

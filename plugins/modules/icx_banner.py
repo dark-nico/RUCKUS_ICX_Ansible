@@ -92,7 +92,7 @@ import re
 from ansible.module_utils._text import to_text
 from ansible.module_utils.connection import exec_command
 from ansible.module_utils.basic import AnsibleModule, env_fallback
-from ansible_collections.commscope.icx.plugins.module_utils.network.icx.icx import load_config, get_config
+from ansible_collections.dark_land.icx.plugins.module_utils.network.icx.icx import load_config, get_config
 from ansible.module_utils.connection import Connection, ConnectionError
 
 
